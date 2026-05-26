@@ -1,6 +1,6 @@
 import { getPoolQuestion } from "@/data/questionPool";
 import { ROUTE_DISPLAY_NAMES, ROUTE_LABELS } from "@/data/routes";
-import { predictionMatched } from "@/lib/chaosScoring";
+import { predictionMatched } from "@/lib/rewards";
 import { endRankReward, rankDisplayLabel } from "@/lib/progression";
 import { computeRouteScores, resolveSecretRoute } from "@/lib/routes";
 import type {
@@ -42,9 +42,7 @@ export function buildPlayerAnswers(
 export interface FinalCalcInput {
   playerAnswers: PlayerAnswer[];
   runQuestions: Question[];
-  coins: number;
   runCoins: number;
-  runScore: number;
   level: number;
   route?: SecretRoute;
 }
@@ -53,9 +51,7 @@ export function calculateFinalResult(input: FinalCalcInput): FinalResult {
   const {
     playerAnswers,
     runQuestions,
-    coins,
     runCoins,
-    runScore,
     level,
     route: routeOverride,
   } = input;
@@ -101,7 +97,7 @@ export function calculateFinalResult(input: FinalCalcInput): FinalResult {
   const chaosScore = Math.round(chaosAccumulator / total);
   const routeScores = computeRouteScores(playerAnswers);
   const route = routeOverride ?? resolveSecretRoute(routeScores);
-  const todayLabel = "Today you got";
+  const todayLabel = "TODAY YOU WERE…";
 
   let title = "THE INTERNET NPC";
   let badge = "🙂 AVERAGE LEGEND";
@@ -158,7 +154,7 @@ export function calculateFinalResult(input: FinalCalcInput): FinalResult {
     variant = "chaos";
   }
 
-  const shareLine = `SUPER OPINION BROS — ${title} | ${matchPercent}% | ${rank} | Score ${runScore}`;
+  const shareLine = `SUPER OPINION BROS — ${title} | ${matchPercent}% | ${rank} | ${runCoins} coins`;
 
   return {
     matchPercent,
@@ -174,9 +170,8 @@ export function calculateFinalResult(input: FinalCalcInput): FinalResult {
     rank,
     rankFlavor: rankReward.flavor,
     level,
-    coins,
+    coins: runCoins,
     runCoins,
-    runScore,
     route,
     shareLine,
   };

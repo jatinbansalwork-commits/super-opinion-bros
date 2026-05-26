@@ -8,6 +8,7 @@ import type {
   RunModifiers,
   LastPredictionResult,
 } from "@/lib/types";
+import type { InternetGateEvent } from "@/lib/surprise/types";
 import { QuestionStage } from "@/components/screens/QuestionStage";
 import { ResultReveal } from "@/components/screens/ResultReveal";
 import { dimLayer } from "@/lib/animations";
@@ -18,6 +19,7 @@ interface RoundViewProps {
   playerChoice?: AnswerChoice;
   modifiers?: RunModifiers;
   lastPrediction?: LastPredictionResult | null;
+  activeGateEvent?: InternetGateEvent | null;
   onAnswer: (choice: AnswerChoice) => void;
   onContinue: () => void;
   continuing?: boolean;
@@ -42,6 +44,7 @@ export function RoundView({
   playerChoice,
   modifiers = {},
   lastPrediction,
+  activeGateEvent = null,
   onAnswer,
   onContinue,
   continuing,
@@ -72,6 +75,7 @@ export function RoundView({
           locked={locked}
           dimmed={isResult}
           modifiers={modifiers}
+          activeGateEvent={activeGateEvent}
         />
         {isResult && playerChoice && (
           <ResultReveal

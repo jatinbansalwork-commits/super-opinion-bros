@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
+import { usePlayerStore } from "@/store/player";
 import { getThemedWorld } from "@/lib/worldTheme";
 import { RoundView } from "@/components/game/RoundView";
 import { WorldMap } from "@/components/world-map/WorldMap";
@@ -30,8 +31,11 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
     mapTargetWorld,
     route,
     runLength,
-    worldEventId,
     mapBranch,
+    gateSurprises,
+    mapFlicker,
+    bossInternetNews,
+    activeGateEvent,
     lastPrediction,
     bossCompleted,
     worldClearWorldId,
@@ -98,10 +102,14 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
                   mapTargetWorld={mapTargetWorld}
                   route={route}
                   bossCompleted={bossCompleted}
-                runLength={runLength}
-                worldEventId={worldEventId}
-                mapBranch={mapBranch}
-                onContinue={dismissWorldMap}
+                  runLength={runLength}
+                  mapBranch={mapBranch}
+                  gateSurprises={gateSurprises}
+                  mapFlicker={mapFlicker}
+                  onContinue={dismissWorldMap}
+                  onMicroBonus={(coins) =>
+                    usePlayerStore.getState().addCoins(coins)
+                  }
                 />
               </motion.div>
             )}
@@ -136,6 +144,7 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
                   completedCount={currentWorld + 1}
                   bossState={bossState}
                   lastChoice={pendingChoice ?? undefined}
+                  internetNews={bossInternetNews}
                   onPredict={submitBossPrediction}
                   onDismissResult={dismissBossResult}
                 />
@@ -165,6 +174,7 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
                   playerChoice={(pendingChoice ?? playerChoice)!}
                   modifiers={modifiers}
                   lastPrediction={lastPrediction}
+                  activeGateEvent={activeGateEvent}
                   onAnswer={submitAnswer}
                   onContinue={handleContinue}
                   continuing={continuing}

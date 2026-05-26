@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { motion } from "framer-motion";
 import type { FinalResult } from "@/lib/types";
 import { getShareText } from "@/lib/scoring";
@@ -10,18 +9,12 @@ import { ArcadeButton } from "@/components/ui/ArcadeButton";
 import { Confetti } from "@/components/ui/Confetti";
 import { CharacterSprite } from "@/components/ui/CharacterSprite";
 import { springFast, smoothLoop } from "@/lib/animations";
-import { usePlayerStore } from "@/store/player";
-
 interface FinalCastleProps {
   result: FinalResult;
   onPlayAgain: () => void;
 }
 
 export function FinalCastle({ result, onPlayAgain }: FinalCastleProps) {
-  useEffect(() => {
-    usePlayerStore.getState().setBestResult(endRankReward(result.matchPercent));
-  }, [result.matchPercent]);
-
   const handleShareText = async () => {
     const text = getShareText(result);
     if (navigator.share) {
@@ -62,7 +55,6 @@ export function FinalCastle({ result, onPlayAgain }: FinalCastleProps) {
         className="relative z-10 flex h-full flex-col items-center justify-center gap-3 px-6 text-center overflow-y-auto py-8"
       >
         <p className="font-arcade text-sm text-[#FBD000]">FINAL CASTLE</p>
-        <p className="font-arcade text-xs text-white/80">{result.todayLabel}</p>
 
         <motion.h1
           className="font-display text-3xl sm:text-5xl text-white leading-tight max-w-lg"
@@ -115,7 +107,7 @@ export function FinalCastle({ result, onPlayAgain }: FinalCastleProps) {
 
         <div className="border-4 border-[#3D2817] bg-black/20 rounded-xl px-5 py-3 w-full max-w-sm">
           <p className="font-arcade text-[10px] text-white/80">
-            Score {result.runScore} · {result.playstyle}
+            🪙 {result.runCoins} coins · {result.playstyle}
           </p>
         </div>
 

@@ -9,8 +9,6 @@ import {
 import { StageBlocks } from "@/components/decor/StageBlocks";
 import { ArcadeButton } from "@/components/ui/ArcadeButton";
 import { springFast, smooth } from "@/lib/animations";
-import { usePlayerStore } from "@/store/player";
-
 interface TitleScreenProps {
   ready: boolean;
   cloudsFrozen?: boolean;
@@ -33,7 +31,6 @@ export function TitleScreen({
   uiHidden = false,
   onStart,
 }: TitleScreenProps) {
-  const bestResult = usePlayerStore((s) => s.bestResult);
   return (
     <div className="relative h-full w-full overflow-hidden bg-gradient-to-b from-[#5C94FC] via-[#7EC8E3] to-[#43B047]">
       <ParallaxClouds slow frozen={cloudsFrozen} />
@@ -87,18 +84,6 @@ export function TitleScreen({
         >
           THE INTERNET STRIKES BACK
         </motion.p>
-
-        {bestResult && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ ...smooth, delay: 0.42 }}
-            className="font-arcade text-[10px] text-white/80 mt-3 shrink-0"
-            style={{ textShadow: "2px 2px 0 #3D2817" }}
-          >
-            🏆 Best Result: {bestResult}
-          </motion.p>
-        )}
 
         <motion.div
           initial={{ scale: 0, opacity: 0 }}

@@ -157,17 +157,3 @@ export function kingdomLabel(worldId: number): string {
   const roman = ROMAN[worldId - 1];
   return roman ? `KINGDOM ${roman}` : `KINGDOM ${worldId}`;
 }
-
-export type JourneyDotState = "done" | "active" | "future";
-
-export function journeyDotStates(
-  activeKingdom: number,
-  total: number
-): JourneyDotState[] {
-  return Array.from({ length: total }, (_, i) => {
-    const n = i + 1;
-    if (n < activeKingdom) return "done";
-    if (n === activeKingdom) return "active";
-    return "future";
-  });
-}

@@ -6,9 +6,8 @@ export type { GameMode };
 export interface GameModeDefinition {
   id: GameMode;
   title: string;
-  subtitle: string;
-  lines: string[];
-  stars: number;
+  line1: string;
+  line2: string;
   recommended?: boolean;
   runLength: number;
   bosses: boolean;
@@ -16,17 +15,12 @@ export interface GameModeDefinition {
   powerUps: boolean;
 }
 
-export function starsDisplay(count: number): string {
-  return "★".repeat(count);
-}
-
 export const GAME_MODES: GameModeDefinition[] = [
   {
     id: "casual",
     title: "CASUAL",
-    subtitle: "5 Questions",
-    lines: ["Quick run"],
-    stars: 1,
+    line1: "5 Questions",
+    line2: "Fast chaos",
     runLength: 5,
     bosses: false,
     routes: false,
@@ -35,9 +29,8 @@ export const GAME_MODES: GameModeDefinition[] = [
   {
     id: "adventure",
     title: "ADVENTURE",
-    subtitle: "10 Questions",
-    lines: ["Boss battles"],
-    stars: 3,
+    line1: "10 Questions • Boss Battle",
+    line2: "",
     recommended: true,
     runLength: 10,
     bosses: true,
@@ -47,9 +40,8 @@ export const GAME_MODES: GameModeDefinition[] = [
   {
     id: "chaos",
     title: "CHAOS",
-    subtitle: "Routes · Bosses · Secrets",
-    lines: ["Routes", "Bosses", "Secrets"],
-    stars: 5,
+    line1: "Routes • Weird rules",
+    line2: "",
     runLength: 20,
     bosses: true,
     routes: true,

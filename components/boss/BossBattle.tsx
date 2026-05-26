@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import { getBossForCompletedCount } from "@/data/bosses";
 import type { AnswerChoice, BossState, GamePhase } from "@/lib/types";
 import { ArcadeButton } from "@/components/ui/ArcadeButton";
+import { InternetNewsCard } from "@/components/surprise/InternetNewsCard";
+import type { InternetNewsItem } from "@/lib/surprise/internetNews";
 import { BossHealthBar } from "@/components/boss/BossHealthBar";
 import { springFast, smoothIn } from "@/lib/animations";
 
@@ -14,6 +16,7 @@ interface BossBattleProps {
   lastChoice?: AnswerChoice;
   onPredict: (choice: AnswerChoice) => void;
   onDismissResult: () => void;
+  internetNews?: InternetNewsItem | null;
 }
 
 export function BossBattle({
@@ -22,6 +25,7 @@ export function BossBattle({
   bossState,
   onPredict,
   onDismissResult,
+  internetNews = null,
 }: BossBattleProps) {
   const boss = getBossForCompletedCount(completedCount);
   if (!boss) return null;
@@ -49,6 +53,7 @@ export function BossBattle({
                 {boss.winLine}
               </p>
               <p className="font-arcade text-xs text-white mt-4">+100 COINS</p>
+              {internetNews && <InternetNewsCard news={internetNews} />}
             </>
           ) : (
             <>

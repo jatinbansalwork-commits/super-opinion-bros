@@ -47,7 +47,7 @@ export async function renderShareCardPng(
   ctx.fillText(`MATCH ${result.matchPercent}%`, W / 2, 360);
   ctx.fillText(`CHAOS ${result.chaosScore}`, W / 2, 395);
   ctx.fillText(`RANK: ${result.rank}`, W / 2, 430);
-  ctx.fillText(`SCORE ${result.runScore}`, W / 2, 465);
+  ctx.fillText(`${result.runCoins} COINS`, W / 2, 465);
 
   ctx.fillStyle = "#FBD000";
   ctx.font = "12px monospace";

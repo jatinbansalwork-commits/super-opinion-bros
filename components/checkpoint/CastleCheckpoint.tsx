@@ -25,7 +25,7 @@ export function CastleCheckpoint({
   playerAnswers,
   onContinue,
 }: CastleCheckpointProps) {
-  const { runCoins, coins } = usePlayerStore();
+  const runCoins = usePlayerStore((s) => s.runCoins);
   const runLength = useGameStore((s) => s.runLength);
   const completed = playerAnswers.length;
   const { filled, total } = getRunProgress(completed, runLength);
@@ -96,10 +96,7 @@ export function CastleCheckpoint({
           transition={{ delay: 0.4, ...smoothIn }}
         >
           <p className="font-arcade text-[10px] text-[#3D2817]">COINS</p>
-          <p className="font-display text-3xl text-[#E52521]">
-            {runCoins}{" "}
-            <span className="text-lg font-arcade">(+{coins} total)</span>
-          </p>
+          <p className="font-display text-3xl text-[#E52521]">{runCoins}</p>
         </motion.div>
 
         <motion.div

@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { audio } from "@/lib/audio";
-import { tierLabel } from "@/lib/chaosScoring";
 import type { Question, AnswerChoice, LastPredictionResult } from "@/lib/types";
 import { useCountUp } from "@/hooks/useCountUp";
 import { ArcadeButton } from "@/components/ui/ArcadeButton";
@@ -17,6 +16,13 @@ interface ResultRevealProps {
   continuing?: boolean;
 }
 
+function choiceLabel(question: Question, choice: AnswerChoice): string {
+  const text = choice === "A" ? question.optionA : question.optionB;
+  const upper = text.toUpperCase();
+  if (upper === "YES" || upper === "NO") return upper;
+  return text;
+}
+
 export function ResultReveal({
   question,
   playerChoice,
@@ -26,21 +32,23 @@ export function ResultReveal({
 }: ResultRevealProps) {
   const { result } = question;
   const winner = result.winner;
-  const winnerLabel =
-    winner === "A" ? question.optionA : question.optionB;
-  const tier = prediction?.tier ?? "wrong";
-  const points = prediction?.pointsEarned ?? 0;
-
-  const animatedVotes = useCountUp(result.totalVotes, 1400, true);
+  const winnerPct =
+    winner === "A" ? result.percentA : result.percentB;
+  const coins = prediction?.coinsEarned ?? 0;
+  const votesHidden = question.modifier === "votes-hidden";
+  const isRare = question.isRare;
+  const animatedCoins = useCountUp(coins, 800, true);
   const animatedYes = useCountUp(result.percentA, 1000, true);
   const animatedNo = useCountUp(result.percentB, 1000, true);
-  const animatedPoints = useCountUp(points, 800, true);
+
+  const youLabel = choiceLabel(question, playerChoice);
+  const internetLabel = choiceLabel(question, winner);
 
   useEffect(() => {
-    if (tier === "wrong") audio.playSfx("lose");
+    if (coins === 0) audio.playSfx("lose");
     else audio.playSfx("reveal");
-    if (points > 0) audio.playSfx("start");
-  }, [tier, points]);
+    if (coins > 0) audio.playSfx("start");
+  }, [coins]);
 
   return (
     <motion.div
@@ -50,78 +58,76 @@ export function ResultReveal({
       transition={smoothIn}
     >
       <div
-        className="pointer-events-auto w-full max-w-[640px] flex flex-col items-center gap-4 sm:gap-5 py-4"
+        className="pointer-events-auto w-full max-w-[640px] flex flex-col items-center gap-5 py-4"
         role="dialog"
         aria-label="Result"
       >
         <p className="font-arcade text-xs sm:text-sm text-white text-center drop-shadow-[2px_2px_0_#3D2817]">
-          THE INTERNET HAS DECIDED
-        </p>
-        <p className="font-arcade text-[10px] text-white/80">
-          You predicted: {playerChoice === "A" ? question.optionA : question.optionB}
+          THE INTERNET HAS SPOKEN
         </p>
 
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: [0, 1.12, 1] }}
-          transition={{ ...smoothIn, delay: 0.1 }}
-          className="text-5xl sm:text-6xl leading-none"
-        >
-          {tier === "exact" ? "✓" : tier === "close" ? "~" : "✗"}
-        </motion.div>
-
-        <div className="text-center w-full">
-          <p
-            className="font-display text-xl sm:text-3xl text-[#FBD000] uppercase tracking-wide"
-            style={{ textShadow: "2px 2px 0 #3D2817" }}
-          >
-            {winnerLabel} WINS
+        <div className="text-center space-y-2 font-arcade text-[11px] sm:text-xs text-white/90">
+          <p>You guessed: {youLabel}</p>
+          <p>
+            Internet chose: {internetLabel}
+            {!votesHidden && ` (${winnerPct}%)`}
           </p>
         </div>
 
-        <div className="w-full border-4 border-[#3D2817] bg-black/40 rounded-xl p-4">
-          <div className="h-10 sm:h-12 rounded-lg overflow-hidden border-2 border-[#3D2817] flex bg-[#E52521]">
-            <motion.div
-              className="h-full bg-[#43B047]"
-              initial={{ width: 0 }}
-              animate={{ width: `${animatedYes}%` }}
-              transition={smooth}
-            />
+        {votesHidden && (
+          <div className="w-full max-w-md border-4 border-[#3D2817] bg-black/40 rounded-xl p-4">
+            <div className="h-8 rounded-lg overflow-hidden border-2 border-[#3D2817] flex bg-[#E52521]">
+              <motion.div
+                className="h-full bg-[#43B047]"
+                initial={{ width: 0 }}
+                animate={{ width: `${animatedYes}%` }}
+                transition={smooth}
+              />
+            </div>
+            <div className="flex justify-between mt-2 font-arcade text-[10px] text-white">
+              <span>{animatedYes}%</span>
+              <span>{animatedNo}%</span>
+            </div>
           </div>
-          <div className="flex justify-between mt-3 font-arcade text-xs sm:text-sm text-white">
-            <span>{animatedYes}%</span>
-            <span>{animatedNo}%</span>
-          </div>
-        </div>
+        )}
 
-        <p className="font-arcade text-xs text-white/90">
-          {animatedVotes >= 1_000_000
-            ? `${(animatedVotes / 1_000_000).toFixed(0)}M votes`
-            : `${animatedVotes.toLocaleString()} votes`}
-        </p>
+        {isRare && (
+          <motion.p
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: [1, 1.08, 1], opacity: 1 }}
+            className="font-arcade text-xs text-[#FBD000] drop-shadow-[2px_2px_0_#3D2817]"
+          >
+            ⭐ RARE EVENT CLEARED
+          </motion.p>
+        )}
 
-        <div className="border-4 border-[#3D2817] bg-[#FBD000] rounded-xl px-6 py-3 text-center relative overflow-visible">
-          {points > 0 && (
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ ...smoothIn, delay: 0.15 }}
+          className={`border-4 rounded-xl px-8 py-4 text-center relative ${
+            isRare
+              ? "border-[#FBD000] bg-[#FBD000]"
+              : "border-[#3D2817] bg-[#FBD000]"
+          }`}
+        >
+          {coins > 0 && (
             <motion.span
               className="absolute -top-6 right-4 text-2xl"
-              initial={{ y: 12, opacity: 0, scale: 0.5 }}
-              animate={{ y: -8, opacity: [0, 1, 0], scale: 1 }}
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: -8, opacity: [0, 1, 0] }}
               transition={{ duration: 0.7 }}
               aria-hidden
             >
               🪙
             </motion.span>
           )}
-          <p className="font-arcade text-[10px] text-[#3D2817]">{tierLabel(tier)}</p>
-          <p className="font-display text-3xl text-[#E52521]">+{animatedPoints}</p>
-          {prediction && prediction.comboMultiplier > 1 && (
-            <p className="font-arcade text-[10px] text-[#3D2817]">
-              COMBO ×{prediction.comboMultiplier.toFixed(2)}
-            </p>
-          )}
-        </div>
+          <p className="font-display text-3xl sm:text-4xl text-[#E52521]">
+            +{animatedCoins} COINS
+          </p>
+        </motion.div>
 
-        <div className="mt-6 w-full flex justify-center">
+        <div className="mt-4 w-full flex justify-center">
           <ArcadeButton
             onClick={onContinue}
             variant="secondary"

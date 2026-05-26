@@ -1,12 +1,10 @@
 import { create } from "zustand";
 import { getBossForCompletedCount } from "@/data/bosses";
 import {
-  questionIndexToStageIndex,
   questionIndexToWorldId,
 } from "@/data/runWorlds";
 import { getWorldEvent, pickWorldEvent } from "@/data/worldEvents";
-import { questionsFromIds } from "@/data/questionPool";
-import { scorePrediction } from "@/lib/chaosScoring";
+import { computeCoinReward } from "@/lib/rewards";
 import { BOSS_MAX_HEALTH } from "@/lib/constants";
 import {
   featuresForMode,
@@ -17,28 +15,25 @@ import {
   buildRunWithDirector,
   createRunSeed,
 } from "@/lib/questionDirector";
+import { pickInternetNews } from "@/lib/surprise/internetNews";
+import { buildGateSurprises } from "@/lib/surprise/applyRunSurprises";
+import { commitGateEventShown } from "@/lib/surprise/gateEvents";
+import {
+  gateEventModifiers,
+  type GateSurpriseBundle,
+  type InternetGateEvent,
+} from "@/lib/surprise/types";
+import type { InternetNewsItem } from "@/lib/surprise/internetNews";
 import {
   branchToRoute,
   computeRouteScores,
   resolveMapBranch,
   resolveSecretRoute,
 } from "@/lib/routes";
-import { hasResumableSave, loadResumableSave } from "@/lib/saveRules";
-import {
-  answersToIds,
-  normalizeSaveProgress,
-  packSaveProgress,
-} from "@/lib/saveProgress";
 import {
   buildPlayerAnswers,
   calculateFinalResult,
 } from "@/lib/scoring";
-import {
-  clearSave,
-  loadSave,
-  migrateLegacyStorage,
-  saveProgress,
-} from "@/lib/storage";
 import { usePlayerStore } from "@/store/player";
 import type {
   AnswerChoice,
@@ -54,6 +49,7 @@ import type {
   WorldEventId,
   LastPredictionResult,
   MapBranch,
+  QuestionModifier,
 } from "@/lib/types";
 
 interface GameStore {
@@ -74,21 +70,23 @@ interface GameStore {
   route: SecretRoute;
   gameMode: GameMode;
   runLength: number;
-  runScore: number;
   seed: number;
   worldEventId: WorldEventId;
-  exactStreak: number;
   lastPrediction: LastPredictionResult | null;
   mapBranch: MapBranch;
   modifiers: RunModifiers;
+  questionModifiers: Record<string, QuestionModifier>;
+  gateSurprises: GateSurpriseBundle | null;
+  activeGateEvent: InternetGateEvent | null;
+  activeGateRandomBonus: number | undefined;
+  bossInternetNews: InternetNewsItem | null;
+  mapFlicker: boolean;
   hydrated: boolean;
-  hasSave: boolean;
 
   hydrate: () => void;
   setPhase: (phase: GamePhase) => void;
   goToModeSelect: () => void;
   startNewGame: (mode: GameMode) => void;
-  continueGame: () => void;
   submitAnswer: (choice: AnswerChoice) => void;
   skipQuestion: () => void;
   advanceAfterResult: () => void;
@@ -104,7 +102,6 @@ interface GameStore {
   restartRun: () => void;
   resetGame: () => void;
   getCurrentQuestion: () => Question | null;
-  persist: () => void;
 }
 
 const titleState = {
@@ -125,162 +122,35 @@ const titleState = {
   route: "default" as SecretRoute,
   gameMode: "chaos" as GameMode,
   runLength: 20,
-  runScore: 0,
   seed: 0,
   worldEventId: "none" as WorldEventId,
-  exactStreak: 0,
   lastPrediction: null as LastPredictionResult | null,
   mapBranch: null as MapBranch,
   modifiers: {} as RunModifiers,
+  questionModifiers: {} as Record<string, QuestionModifier>,
+  gateSurprises: null as GateSurpriseBundle | null,
+  activeGateEvent: null as InternetGateEvent | null,
+  activeGateRandomBonus: undefined as number | undefined,
+  bossInternetNews: null as InternetNewsItem | null,
+  mapFlicker: false,
 };
 
-function progressQuestionIndex(
-  phase: GamePhase,
-  currentWorld: number,
-  mapTargetWorld: number
-): number {
-  return phase === "world-map" ? mapTargetWorld : currentWorld;
-}
-
-function applySaveToState(
-  saved: NonNullable<ReturnType<typeof loadSave>>
-): Pick<
-  GameStore,
-  | "phase"
-  | "currentWorld"
-  | "mapTargetWorld"
-  | "runQuestions"
-  | "runQuestionIds"
-  | "answers"
-  | "playerAnswers"
-  | "finalResult"
-  | "pendingChoice"
-  | "checkpointTargetWorld"
-  | "checkpointNext"
-  | "bossState"
-  | "bossCompleted"
-  | "worldClearWorldId"
-  | "route"
-  | "gameMode"
-  | "runLength"
-  | "runScore"
-  | "seed"
-  | "worldEventId"
-  | "exactStreak"
-  | "lastPrediction"
-  | "mapBranch"
-  | "modifiers"
-> {
-  const runQuestions = questionsFromIds(saved.runQuestionIds);
-  const answersMap = Object.fromEntries(
-    saved.answers.map((a) => [a.questionId, a.choice])
-  );
-  const progress = normalizeSaveProgress(saved);
-  const currentWorld = Math.min(
-    Math.max(progress.questionIndex, 0),
-    Math.max(runQuestions.length - 1, 0)
-  );
-  let phase = saved.phase;
-  let finalResult: FinalResult | null = null;
-  let pendingChoice = saved.pendingChoice ?? null;
-  let checkpointTargetWorld = saved.checkpointTargetWorld ?? null;
-  let checkpointNext = saved.checkpointNext ?? null;
-  let bossState = saved.bossState ?? null;
-  const route = saved.route ?? "default";
-  const gameMode = saved.gameMode ?? "chaos";
-  const runLength = saved.runLength ?? runLengthForMode(gameMode);
-  const runScore = saved.runScore ?? 0;
-  const seed = saved.seed ?? createRunSeed();
-  const worldEventId = saved.worldEvent ?? "none";
-  const exactStreak = saved.exactStreak ?? 0;
-  const mapBranch = saved.mapBranch ?? null;
-  const modifiers = saved.modifiers ?? {};
-  const bossCompleted = progress.bossCompleted;
-  let mapTargetWorld = progress.questionIndex;
-  let worldClearWorldId: number | null = null;
-
-  if (phase === "world-map") {
-    mapTargetWorld = progress.questionIndex;
-  } else {
-    mapTargetWorld = saved.mapTargetWorld ?? currentWorld;
-  }
-
-  if (phase === "world-clear") {
-    worldClearWorldId =
-      bossCompleted[bossCompleted.length - 1] ??
-      questionIndexToWorldId(Math.max(0, currentWorld));
-  }
-
-  if (phase === "checkpoint") {
-    checkpointTargetWorld =
-      saved.checkpointTargetWorld ?? currentWorld + 1;
-    checkpointNext = saved.checkpointNext ?? "world-map";
-  }
-
-  if (
-    phase === "final" ||
-    (runQuestions.length > 0 &&
-      saved.answers.length >= runQuestions.length &&
-      saved.currentQuestion >= runQuestions.length - 1 &&
-      phase !== "checkpoint" &&
-      phase !== "boss" &&
-      phase !== "boss-result")
-  ) {
-    const player = usePlayerStore.getState();
-    phase = "final";
-    finalResult = calculateFinalResult({
-      playerAnswers: saved.answers,
-      runQuestions,
-      coins: player.coins,
-      runCoins: saved.runCoins ?? 0,
-      runScore: saved.runScore ?? 0,
-      level: player.level,
-      route,
-    });
-    pendingChoice = null;
-    checkpointTargetWorld = null;
-    checkpointNext = null;
-    bossState = null;
-  }
-
-  return {
-    phase,
-    currentWorld,
-    mapTargetWorld,
-    runQuestions,
-    runQuestionIds: saved.runQuestionIds,
-    answers: answersMap,
-    playerAnswers: saved.answers,
-    finalResult,
-    pendingChoice,
-    checkpointTargetWorld,
-    checkpointNext,
-    bossState,
-    bossCompleted,
-    worldClearWorldId,
-    route,
-    gameMode,
-    runLength,
-    runScore,
-    seed,
-    worldEventId,
-    exactStreak,
-    lastPrediction: null,
-    mapBranch,
-    modifiers,
-  };
+function rollGateForMap(seed: number, gateIndex: number): GateSurpriseBundle {
+  return buildGateSurprises(seed, gateIndex);
 }
 
 function spawnRun(runLength: number, seed = createRunSeed()) {
   const event = pickWorldEvent(seed);
-  const { questions, runQuestionIds } = buildRunWithDirector(
-    runLength,
-    seed,
-    event.categoryFilter ?? null
-  );
+  const { questions, runQuestionIds, questionModifiers } =
+    buildRunWithDirector(runLength, seed, event.categoryFilter ?? null);
+  const runQuestions = questions.map((q) => ({
+    ...q,
+    modifier: questionModifiers[q.id],
+  }));
   return {
-    runQuestions: questions,
+    runQuestions,
     runQuestionIds,
+    questionModifiers,
     seed,
     worldEventId: event.id,
   };
@@ -307,7 +177,6 @@ function syncRoute(
 function getEventModifiers(worldEventId: WorldEventId) {
   const event = getWorldEvent(worldEventId);
   return {
-    scoreMultiplier: event.scoreMultiplier ?? 1,
     reverseInternet: event.reverseInternet ?? false,
   };
 }
@@ -315,88 +184,38 @@ function getEventModifiers(worldEventId: WorldEventId) {
 export const useGameStore = create<GameStore>((set, get) => ({
   ...titleState,
   hydrated: false,
-  hasSave: false,
 
   hydrate: () => {
-    if (typeof window === "undefined") return;
-    migrateLegacyStorage();
     usePlayerStore.getState().hydrate();
-    set({
-      ...titleState,
-      hydrated: true,
-      hasSave: hasResumableSave(),
-    });
+    set({ ...titleState, hydrated: true });
   },
 
-  setPhase: (phase) => {
-    set({ phase });
-    if (phase !== "title" && phase !== "mode-select") {
-      get().persist();
-    }
-  },
+  setPhase: (phase) => set({ phase }),
 
-  goToModeSelect: () => {
-    set({ phase: "mode-select" });
-  },
+  goToModeSelect: () => set({ phase: "mode-select" }),
 
   startNewGame: (mode) => {
-    clearSave();
-    usePlayerStore.getState().resetRun();
+    usePlayerStore.getState().resetSession();
     const runLength = runLengthForMode(mode);
-    const { runQuestions, runQuestionIds, seed, worldEventId } =
+    const { runQuestions, runQuestionIds, seed, worldEventId, questionModifiers } =
       spawnRun(runLength);
     set({
       ...titleState,
       runQuestions,
       runQuestionIds,
+      questionModifiers,
       gameMode: mode,
       runLength,
-      runScore: 0,
       seed,
       worldEventId,
-      exactStreak: 0,
       lastPrediction: null,
       mapBranch: null,
       phase: "world-map",
       mapTargetWorld: 0,
       currentWorld: 0,
+      gateSurprises: rollGateForMap(seed, 0),
       hydrated: true,
-      hasSave: false,
     });
-    saveProgress({
-      phase: "world-map",
-      currentQuestion: 0,
-      worldId: 1,
-      stageIndex: 1,
-      bossCompleted: [],
-      answeredIds: [],
-      answers: [],
-      runQuestionIds,
-      route: "default",
-      gameMode: mode,
-      runLength,
-      runScore: 0,
-      seed,
-      worldEvent: worldEventId,
-      runCoins: 0,
-      streak: 0,
-      inventory: usePlayerStore.getState().inventory,
-    });
-  },
-
-  continueGame: () => {
-    const saved = loadResumableSave();
-    if (!saved) {
-      set({ hasSave: false });
-      return;
-    }
-    usePlayerStore.getState().hydrate();
-    set({
-      ...applySaveToState(saved),
-      hydrated: true,
-      hasSave: true,
-    });
-    usePlayerStore.getState().syncMatchRate(saved.answers);
   },
 
   submitAnswer: (choice) => {
@@ -405,34 +224,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const mods = get().modifiers;
     const eventMods = getEventModifiers(get().worldEventId);
-    const chaosFlip =
-      mods.chaosFlip || eventMods.reverseInternet;
-    const outcome = scorePrediction(choice, question, get().exactStreak, {
-      doubleNext: mods.doubleNext,
-      scoreMultiplier: eventMods.scoreMultiplier,
-      reverseInternet: chaosFlip,
+    const gateMods = gateEventModifiers(
+      get().activeGateEvent?.id ?? null,
+      get().activeGateRandomBonus
+    );
+    const qMod = get().questionModifiers[question.id];
+    const reverseInternet =
+      eventMods.reverseInternet ||
+      gateMods.reverseInternet ||
+      qMod === "crowd-flip" ||
+      qMod === "hot-take" ||
+      mods.chaosFlip;
+    const doubleNext = mods.doubleNext || qMod === "double-reward";
+    let reverse = reverseInternet;
+    if (gateMods.unstableVotes) {
+      reverse = ((get().seed + get().currentWorld) % 4) < 2 ? !reverse : reverse;
+    }
+    const outcome = computeCoinReward(choice, question, {
+      doubleNext,
+      doubleOnMatch: gateMods.doubleOnMatch,
+      reverseInternet: reverse,
+      majorityBonus: gateMods.majorityBonus,
+      randomBonus: gateMods.randomBonusCoins ?? undefined,
+      isRare: question.isRare,
     });
 
     const newAnswers = { ...get().answers, [question.id]: choice };
     const playerAnswers = buildPlayerAnswers(
       newAnswers,
       get().runQuestions,
-      chaosFlip
+      reverseInternet
     );
     const lastIdx = playerAnswers.length - 1;
     if (lastIdx >= 0) {
       playerAnswers[lastIdx] = {
         ...playerAnswers[lastIdx],
         tier: outcome.tier,
-        pointsEarned: outcome.pointsEarned,
+        coinsEarned: outcome.coinsEarned,
       };
     }
 
     const { gameMode, runLength } = get();
-    usePlayerStore
-      .getState()
-      .addMatchReward(outcome.tier !== "wrong", mods.doubleNext, false);
-    usePlayerStore.getState().syncMatchRate(playerAnswers);
+    usePlayerStore.getState().addCoins(outcome.coinsEarned);
 
     let mapBranch = get().mapBranch;
     if (playerAnswers.length >= 3 && !mapBranch) {
@@ -448,16 +281,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playerAnswers,
       pendingChoice: choice,
       route,
-      runScore: get().runScore + outcome.pointsEarned,
-      exactStreak: outcome.exactStreak,
       lastPrediction: {
         tier: outcome.tier,
-        pointsEarned: outcome.pointsEarned,
-        comboMultiplier: outcome.comboMultiplier,
-        exactStreak: outcome.exactStreak,
+        coinsEarned: outcome.coinsEarned,
       },
       mapBranch,
       modifiers: {},
+      activeGateEvent: null,
+      activeGateRandomBonus: undefined,
     });
 
     if (bossNow) {
@@ -465,7 +296,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       set({ phase: "result" });
     }
-    get().persist();
   },
 
   skipQuestion: () => {
@@ -478,10 +308,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().runQuestions
     );
     const { gameMode, runLength } = get();
-    usePlayerStore
-      .getState()
-      .addMatchReward(false, false, featuresForMode(gameMode).powerUps);
-    usePlayerStore.getState().syncMatchRate(playerAnswers);
+    usePlayerStore.getState().addCoins(0);
     const route = syncRoute(playerAnswers, gameMode, get().mapBranch);
     const completedCount = get().currentWorld + 1;
     const bossNow = isBossMilestone(completedCount, gameMode, runLength);
@@ -499,7 +326,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } else {
       set({ phase: "result" });
     }
-    get().persist();
   },
 
   startBoss: () => {
@@ -519,11 +345,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         shake: false,
       },
     });
-    get().persist();
   },
 
   submitBossPrediction: (choice) => {
-    const { bossState, runQuestions } = get();
+    const { bossState } = get();
     if (!bossState) return;
     const completedCount = get().currentWorld + 1;
     const boss = getBossForCompletedCount(completedCount);
@@ -559,6 +384,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           shake: !correct,
         },
         pendingChoice: choice,
+        bossInternetNews: defeated ? pickInternetNews() : null,
       });
     } else {
       set({
@@ -572,7 +398,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pendingChoice: choice,
       });
     }
-    get().persist();
   },
 
   dismissBossResult: () => {
@@ -586,7 +411,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const bossCompleted = get().bossCompleted.includes(worldId)
         ? get().bossCompleted
         : [...get().bossCompleted, worldId];
-      usePlayerStore.getState().addCheckpointXp();
       const runDone = completedCount >= get().runQuestions.length;
       set({
         phase: featuresForMode(get().gameMode).bosses
@@ -606,9 +430,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           finalResult: calculateFinalResult({
             playerAnswers: get().playerAnswers,
             runQuestions: get().runQuestions,
-            coins: player.coins,
             runCoins: player.runCoins,
-            runScore: get().runScore,
             level: player.level,
             route: get().route,
           }),
@@ -627,7 +449,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         pendingChoice: null,
       });
     }
-    get().persist();
   },
 
   dismissWorldClear: () => {
@@ -638,7 +459,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: "checkpoint",
       worldClearWorldId: null,
     });
-    get().persist();
   },
 
   advanceAfterResult: () => {
@@ -650,24 +470,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const finalResult = calculateFinalResult({
         playerAnswers: get().playerAnswers,
         runQuestions,
-        coins: player.coins,
         runCoins: player.runCoins,
-        runScore: get().runScore,
         level: player.level,
         route: get().route,
       });
       set({ phase: "final", finalResult, pendingChoice: null });
-      get().persist();
       return;
     }
 
+    const { seed } = get();
     set({
       mapTargetWorld: nextWorld,
       phase: "world-map",
       pendingChoice: null,
       modifiers: {},
+      gateSurprises: rollGateForMap(seed, nextWorld),
+      activeGateEvent: null,
+      mapFlicker: false,
     });
-    get().persist();
   },
 
   dismissWorldMap: () => {
@@ -679,23 +499,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const finalResult = calculateFinalResult({
         playerAnswers: get().playerAnswers,
         runQuestions,
-        coins: player.coins,
         runCoins: player.runCoins,
-        runScore: get().runScore,
         level: player.level,
         route: get().route,
       });
       set({ phase: "final", finalResult });
-      get().persist();
       return;
     }
+
+    const bundle = get().gateSurprises;
+    const gateEvent = bundle?.gateEvent ?? null;
+    if (gateEvent) commitGateEventShown(gateEvent);
 
     set({
       currentWorld: target,
       phase: "question",
       modifiers: {},
+      activeGateEvent: gateEvent,
+      activeGateRandomBonus: bundle?.eventRandomBonus,
+      gateSurprises: null,
+      mapFlicker: false,
     });
-    get().persist();
   },
 
   dismissCheckpoint: () => {
@@ -706,9 +530,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const finalResult = calculateFinalResult({
         playerAnswers: get().playerAnswers,
         runQuestions,
-        coins: player.coins,
         runCoins: player.runCoins,
-        runScore: get().runScore,
         level: player.level,
         route: get().route,
       });
@@ -719,19 +541,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         checkpointNext: null,
         bossState: null,
       });
-      get().persist();
       return;
     }
 
     const target = checkpointTargetWorld ?? get().currentWorld + 1;
+    const { seed } = get();
     set({
       mapTargetWorld: target,
       phase: "world-map",
       checkpointTargetWorld: null,
       checkpointNext: null,
       bossState: null,
+      gateSurprises: rollGateForMap(seed, target),
+      bossInternetNews: null,
     });
-    get().persist();
   },
 
   applyPowerUp: (type) => {
@@ -767,7 +590,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             phase: "question",
             modifiers: { timeTravelIndex: idx - 1 },
           });
-          get().persist();
           return;
         }
       }
@@ -776,83 +598,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mods.chaosFlip = true;
     }
     set({ modifiers: mods });
-    get().persist();
   },
 
   clearModifiers: () => set({ modifiers: {} }),
 
   quitToTitle: () => {
-    get().persist();
-    set({
-      ...titleState,
-      hydrated: true,
-      hasSave: hasResumableSave(),
-    });
+    set({ ...titleState, hydrated: true, phase: "title" });
   },
 
   restartRun: () => {
-    clearSave();
-    usePlayerStore.getState().resetRun();
-    set({
-      ...titleState,
-      hydrated: true,
-      hasSave: false,
-    });
+    usePlayerStore.getState().resetSession();
+    set({ ...titleState, hydrated: true, phase: "mode-select" });
   },
 
   resetGame: () => {
-    get().restartRun();
-  },
-
-  persist: () => {
-    const state = get();
-    if (
-      state.phase === "title" ||
-      state.phase === "mode-select" ||
-      state.runQuestionIds.length === 0
-    ) {
-      return;
-    }
-    const player = usePlayerStore.getState();
-    const qIndex = progressQuestionIndex(
-      state.phase,
-      state.currentWorld,
-      state.mapTargetWorld
-    );
-    const progress = {
-      worldId: questionIndexToWorldId(qIndex),
-      stageIndex: questionIndexToStageIndex(qIndex),
-      questionIndex: qIndex,
-      bossCompleted: state.bossCompleted,
-      answeredIds: answersToIds(state.playerAnswers),
-    };
-    saveProgress({
-      phase: state.phase,
-      ...packSaveProgress(progress),
-      answers: state.playerAnswers,
-      pendingChoice: state.pendingChoice ?? undefined,
-      runQuestionIds: state.runQuestionIds,
-      checkpointTargetWorld: state.checkpointTargetWorld ?? undefined,
-      checkpointNext: state.checkpointNext ?? undefined,
-      bossState: state.bossState,
-      route: state.route,
-      modifiers: state.modifiers,
-      runCoins: player.runCoins,
-      streak: player.streak,
-      inventory: player.inventory,
-      gameMode: state.gameMode,
-      runLength: state.runLength,
-      runScore: state.runScore,
-      seed: state.seed,
-      worldEvent: state.worldEventId,
-      exactStreak: state.exactStreak,
-      mapBranch: state.mapBranch ?? undefined,
-    });
-    set({ hasSave: true });
+    usePlayerStore.getState().resetSession();
+    set({ ...titleState, hydrated: true, phase: "title" });
   },
 
   getCurrentQuestion: () => {
-    const { runQuestions, currentWorld } = get();
-    return runQuestions[currentWorld] ?? null;
+    const { runQuestions, currentWorld, questionModifiers, activeGateEvent } =
+      get();
+    const q = runQuestions[currentWorld];
+    if (!q) return null;
+    let mod = questionModifiers[q.id] ?? q.modifier;
+    const gate = gateEventModifiers(
+      activeGateEvent?.id ?? null,
+      get().activeGateRandomBonus
+    );
+    if (gate.hideVotes) mod = "votes-hidden";
+    return mod ? { ...q, modifier: mod } : q;
   },
 }));

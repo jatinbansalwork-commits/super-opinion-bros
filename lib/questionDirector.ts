@@ -1,64 +1,23 @@
 import {
-  BASE_POOL,
-  SPECIAL_QUESTIONS,
-  getPoolQuestion,
-  shuffle,
-  type PoolQuestion,
-} from "@/data/questionPool";
-import { getWorldTheme } from "@/data/worlds";
-import type { Question, QuestionResult } from "@/lib/types";
-import { SAVE_VERSION } from "@/lib/constants";
+  catalogToPoolShape,
+  filterCatalogByCategory,
+  getAllCatalogQuestions,
+  getCatalogQuestion,
+} from "@/lib/questionCatalog";
+import type { CatalogQuestion, QuestionCategory } from "@/lib/questionCatalog/types";
+import {
+  getBlockedFromRecentRuns,
+  getQuestionStats,
+  loadDirectorHistory,
+  recordRunInHistory,
+  saveDirectorHistory,
+} from "@/lib/questionHistory";
+import { rollQuestionModifier } from "@/lib/questionModifiers";
+import { applyQuestionSurprises } from "@/lib/surprise/applyRunSurprises";
+import type { Question, QuestionModifier } from "@/lib/types";
 
-const DIRECTOR_KEY = "super-opinion-bros-director";
-
-const BLOCK_RECENT = 15;
-const UNSEEN_WEIGHT = 3;
-const WILDCARD_EVERY = 5;
-
-export interface QuestionStat {
-  timesSeen: number;
-  lastSeen: number;
-}
-
-export interface DirectorState {
-  version: number;
-  stats: Record<string, QuestionStat>;
-  recentIds: string[];
-  runCounter: number;
-}
-
-function loadDirectorState(): DirectorState {
-  if (typeof window === "undefined") {
-    return { version: SAVE_VERSION, stats: {}, recentIds: [], runCounter: 0 };
-  }
-  try {
-    const raw = localStorage.getItem(DIRECTOR_KEY);
-    if (!raw) {
-      return { version: SAVE_VERSION, stats: {}, recentIds: [], runCounter: 0 };
-    }
-    return {
-      version: SAVE_VERSION,
-      stats: {},
-      recentIds: [],
-      runCounter: 0,
-      ...JSON.parse(raw),
-    };
-  } catch {
-    return { version: SAVE_VERSION, stats: {}, recentIds: [], runCounter: 0 };
-  }
-}
-
-function saveDirectorState(state: DirectorState): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(
-      DIRECTOR_KEY,
-      JSON.stringify({ ...state, version: SAVE_VERSION })
-    );
-  } catch {
-    /* quota */
-  }
-}
+const UNSEEN_WEIGHT_MULT = 5;
+const RECENCY_RUN_GAP = 10;
 
 function mulberry32(seed: number): () => number {
   return () => {
@@ -70,60 +29,63 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function poolToQuestion(pq: PoolQuestion, worldIndex: number): Question {
-  const theme = getWorldTheme(worldIndex);
-  const result: QuestionResult = {
-    winner: pq.votes.winner,
-    percentA: pq.votes.percentA,
-    percentB: pq.votes.percentB,
-    totalVotes: pq.votes.total,
-  };
-  return {
-    id: pq.id,
-    world: worldIndex + 1,
-    worldName: theme.name,
-    kingdom: pq.special ? "WILD CARD" : theme.kingdom,
-    title: pq.text,
-    emoji: pq.emoji,
-    optionA: pq.options.a,
-    optionB: pq.options.b,
-    result,
-  };
+function selectionWeight(
+  q: CatalogQuestion,
+  history: ReturnType<typeof loadDirectorHistory>,
+  runCounter: number
+): number {
+  const stats = getQuestionStats(history, q.id);
+  let w = q.weight;
+
+  if (stats.shown === 0) {
+    w *= UNSEEN_WEIGHT_MULT;
+  } else {
+    w /= 1 + stats.shown * 0.35;
+  }
+
+  if (stats.lastSeenRun > 0 && runCounter - stats.lastSeenRun < RECENCY_RUN_GAP) {
+    w *= 0.08;
+  }
+
+  if (q.rarity === "rare") w *= 0.75;
+  if (q.rarity === "uncommon") w *= 0.9;
+
+  return Math.max(w, 0.01);
 }
 
 function weightedPick(
-  pool: PoolQuestion[],
+  pool: CatalogQuestion[],
   rng: () => number,
-  stats: Record<string, QuestionStat>
-): PoolQuestion | null {
+  history: ReturnType<typeof loadDirectorHistory>,
+  runCounter: number
+): CatalogQuestion | null {
   if (pool.length === 0) return null;
-  const weights = pool.map((q) => {
-    const seen = stats[q.id]?.timesSeen ?? 0;
-    return seen === 0 ? UNSEEN_WEIGHT : 1;
-  });
+  const weights = pool.map((q) => selectionWeight(q, history, runCounter));
   const total = weights.reduce((a, b) => a + b, 0);
   let roll = rng() * total;
   for (let i = 0; i < pool.length; i++) {
-    roll -= weights[i];
-    if (roll <= 0) return pool[i];
+    roll -= weights[i]!;
+    if (roll <= 0) return pool[i]!;
   }
-  return pool[pool.length - 1];
+  return pool[pool.length - 1] ?? null;
 }
 
-function recordPick(
-  state: DirectorState,
-  id: string
-): void {
-  const now = Date.now();
-  const prev = state.stats[id] ?? { timesSeen: 0, lastSeen: 0 };
-  state.stats[id] = {
-    timesSeen: prev.timesSeen + 1,
-    lastSeen: now,
-  };
-  state.recentIds = [id, ...state.recentIds.filter((x) => x !== id)].slice(
-    0,
-    BLOCK_RECENT
-  );
+function normalizeCategoryFilter(
+  filter?: string | null
+): QuestionCategory | null {
+  if (!filter) return null;
+  const f = filter.toLowerCase();
+  if (f === "meme" || f === "wildcard") return "chaos";
+  if (
+    f === "food" ||
+    f === "internet" ||
+    f === "culture" ||
+    f === "tech" ||
+    f === "chaos"
+  ) {
+    return f;
+  }
+  return null;
 }
 
 export function buildRunWithDirector(
@@ -133,62 +95,73 @@ export function buildRunWithDirector(
 ): {
   questions: Question[];
   runQuestionIds: string[];
+  questionModifiers: Record<string, QuestionModifier>;
   seed: number;
 } {
-  const state = loadDirectorState();
-  state.runCounter += 1;
+  const history = loadDirectorHistory();
+  const runCounter = history.runCounter + 1;
   const rng = mulberry32(seed);
+  const blockedRecent = getBlockedFromRecentRuns(history);
+  const pickedThisRun = new Set<string>();
 
-  let pool = BASE_POOL.filter(
-    (q) => !state.recentIds.includes(q.id)
+  let pool = getAllCatalogQuestions().filter(
+    (q) => !blockedRecent.has(q.id)
   );
-  if (pool.length < runLength) {
-    pool = [...BASE_POOL];
-  }
 
-  if (categoryFilter) {
-    const filtered = pool.filter((q) => q.category === categoryFilter);
+  const cat = normalizeCategoryFilter(categoryFilter);
+  if (cat) {
+    const filtered = filterCatalogByCategory(cat);
     if (filtered.length >= Math.min(5, runLength)) {
-      pool = filtered;
+      pool = filtered.filter((q) => !blockedRecent.has(q.id));
     }
   }
 
-  const picked: PoolQuestion[] = [];
-  const poolCopy = [...pool];
-
-  for (let slot = 0; slot < runLength; slot++) {
-    const isWildcardSlot =
-      (slot + 1) % WILDCARD_EVERY === 0 && runLength >= WILDCARD_EVERY;
-    if (isWildcardSlot) {
-      const wild = shuffle(SPECIAL_QUESTIONS)[0];
-      picked.push(wild);
-      recordPick(state, wild.id);
-      continue;
-    }
-
-    const choice = weightedPick(poolCopy, rng, state.stats);
-    if (!choice) break;
-    picked.push(choice);
-    recordPick(state, choice.id);
-    const idx = poolCopy.findIndex((q) => q.id === choice.id);
-    if (idx >= 0) poolCopy.splice(idx, 1);
+  if (pool.length < runLength) {
+    pool = getAllCatalogQuestions().filter((q) => !pickedThisRun.has(q.id));
   }
+
+  const picked: CatalogQuestion[] = [];
+  let poolCopy = [...pool];
 
   while (picked.length < runLength && poolCopy.length > 0) {
-    const choice = weightedPick(poolCopy, rng, state.stats);
+    const available = poolCopy.filter((q) => !pickedThisRun.has(q.id));
+    if (available.length === 0) break;
+
+    const choice = weightedPick(available, rng, history, runCounter);
     if (!choice) break;
+
     picked.push(choice);
-    recordPick(state, choice.id);
-    const idx = poolCopy.findIndex((q) => q.id === choice.id);
-    if (idx >= 0) poolCopy.splice(idx, 1);
+    pickedThisRun.add(choice.id);
+    poolCopy = poolCopy.filter((q) => q.id !== choice.id);
   }
 
-  saveDirectorState(state);
+  if (picked.length < runLength) {
+    const remaining = getAllCatalogQuestions().filter(
+      (q) => !pickedThisRun.has(q.id)
+    );
+    for (const q of remaining) {
+      if (picked.length >= runLength) break;
+      picked.push(q);
+      pickedThisRun.add(q.id);
+    }
+  }
 
-  const questions = picked.map((pq, i) => poolToQuestion(pq, i));
+  const questionIds = picked.map((q) => q.id);
+  const nextHistory = recordRunInHistory(history, questionIds);
+  saveDirectorHistory(nextHistory);
+
+  const questionModifiers: Record<string, QuestionModifier> = {};
+  for (const q of picked) {
+    const mod = rollQuestionModifier(rng);
+    if (mod) questionModifiers[q.id] = mod;
+  }
+
+  const { questions } = applyQuestionSurprises(picked, seed);
+
   return {
     questions,
-    runQuestionIds: picked.map((q) => q.id),
+    runQuestionIds: questions.map((q) => q.id),
+    questionModifiers,
     seed,
   };
 }
@@ -197,4 +170,8 @@ export function createRunSeed(): number {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-export { getPoolQuestion };
+/** @deprecated Use getCatalogQuestion */
+export function getPoolQuestion(id: string) {
+  const cq = getCatalogQuestion(id);
+  return cq ? catalogToPoolShape(cq) : undefined;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { TitleScreen } from "@/components/screens/TitleScreen";
@@ -16,8 +16,7 @@ import { PowerUpInventory } from "@/components/powerups/PowerUpInventory";
 import { useGameAudio } from "@/hooks/useGameAudio";
 import { useAudioUnlock } from "@/hooks/useAudioUnlock";
 import { audio } from "@/lib/audio";
-import { getSavePreview } from "@/lib/savePreview";
-import { saveSettings } from "@/lib/storage";
+import { clearLegacySaves } from "@/lib/storage";
 import { featuresForMode } from "@/lib/gameMode";
 import type { GameMode } from "@/lib/types";
 import { smooth } from "@/lib/animations";
@@ -30,11 +29,9 @@ export function GameShell() {
     gameMode,
     finalResult,
     hydrated,
-    hasSave,
     hydrate,
     goToModeSelect,
     startNewGame,
-    continueGame,
     quitToTitle,
     restartRun,
     resetGame,
@@ -44,15 +41,10 @@ export function GameShell() {
   const [modeLaunching, setModeLaunching] = useState(false);
   const [mapEntering, setMapEntering] = useState(false);
 
-  const savePreview = useMemo(
-    () => (phase === "mode-select" && hasSave ? getSavePreview() : null),
-    [phase, hasSave]
-  );
-
   useEffect(() => {
     hydrate();
     audio.init();
-    saveSettings({ version: "2.3" });
+    clearLegacySaves();
   }, [hydrate]);
 
   useAudioUnlock();
@@ -80,16 +72,7 @@ export function GameShell() {
     goToModeSelect();
   }, [goToModeSelect]);
 
-  const handleResume = useCallback(() => {
-    audio.playSfx("start");
-    continueGame();
-  }, [continueGame]);
-
-  const handleModeNewRun = useCallback(() => {
-    audio.playSfx("select");
-  }, []);
-
-  const handleLaunchMode = useCallback(
+  const handleStartRun = useCallback(
     (mode: GameMode) => {
       audio.playSfx("start");
       setModeLaunching(true);
@@ -173,11 +156,8 @@ export function GameShell() {
               transition={{ duration: 0.45, ease: "easeOut" }}
             >
               <ModeSelectScreen
-                savePreview={savePreview}
                 launching={modeLaunching}
-                onResume={handleResume}
-                onNewRun={handleModeNewRun}
-                onLaunch={handleLaunchMode}
+                onStart={handleStartRun}
               />
             </motion.div>
           )}

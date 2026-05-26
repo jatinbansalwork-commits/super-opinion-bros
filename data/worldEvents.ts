@@ -38,7 +38,7 @@ export const WORLD_EVENTS: WorldEventDefinition[] = [
     id: "meme-storm",
     label: "MEME STORM",
     description: "Wild questions surge.",
-    categoryFilter: "meme",
+    categoryFilter: "chaos",
   },
   {
     id: "tech-trial",

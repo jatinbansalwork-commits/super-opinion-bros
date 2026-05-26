@@ -37,6 +37,12 @@ export type WorldEventId =
 
 export type PredictionTier = "exact" | "close" | "wrong";
 
+export type QuestionModifier =
+  | "crowd-flip"
+  | "hot-take"
+  | "votes-hidden"
+  | "double-reward";
+
 export type MapBranch = "normal" | "chaos" | null;
 
 export type PlayerRank =
@@ -66,6 +72,8 @@ export interface QuestionResult {
   totalVotes: number;
 }
 
+export type QuestionMutation = "speedrun" | "caps-lock" | "breaking-news";
+
 export interface Question {
   id: string;
   world: number;
@@ -76,6 +84,9 @@ export interface Question {
   optionA: string;
   optionB: string;
   result: QuestionResult;
+  modifier?: QuestionModifier;
+  mutation?: QuestionMutation;
+  isRare?: boolean;
 }
 
 export interface PlayerAnswer {
@@ -83,7 +94,7 @@ export interface PlayerAnswer {
   choice: AnswerChoice;
   matchedMajority: boolean;
   tier?: PredictionTier;
-  pointsEarned?: number;
+  coinsEarned?: number;
 }
 
 export interface RunModifiers {
@@ -110,16 +121,13 @@ export interface FinalResult {
   level: number;
   coins: number;
   runCoins: number;
-  runScore: number;
   route: SecretRoute;
   shareLine: string;
 }
 
 export interface LastPredictionResult {
   tier: PredictionTier;
-  pointsEarned: number;
-  comboMultiplier: number;
-  exactStreak: number;
+  coinsEarned: number;
 }
 
 export interface WorldTheme {

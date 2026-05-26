@@ -1,13 +1,7 @@
 import type { PlayerAnswer, PlayerRank } from "@/lib/types";
+import { COIN_BOSS, internetTitleForLevel, levelFromCoins } from "@/lib/rewards";
 
-export const COIN_MATCH = 10;
-export const COIN_STREAK_BONUS = 50;
-export const COIN_BOSS = 100;
-export const COIN_DOUBLE_MULT = 2;
-
-export const XP_MATCH = 8;
-export const XP_BOSS = 40;
-export const XP_CHECKPOINT = 25;
+export { COIN_BOSS, levelFromCoins, internetTitleForLevel };
 
 export interface RankDisplay {
   rank: PlayerRank;
@@ -65,20 +59,6 @@ export const CROWD_ENERGY = [
   { level: 2 as const, emoji: "🔥", label: "Heated" },
   { level: 3 as const, emoji: "☠️", label: "Terminally Online" },
 ];
-
-export function xpForLevel(level: number): number {
-  return level * 120;
-}
-
-export function levelFromXp(xp: number): number {
-  let level = 1;
-  let remaining = xp;
-  while (remaining >= xpForLevel(level) && level < 99) {
-    remaining -= xpForLevel(level);
-    level += 1;
-  }
-  return level;
-}
 
 export function computeMatchPercent(answers: PlayerAnswer[]): number {
   if (answers.length === 0) return 0;
