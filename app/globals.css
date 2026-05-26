@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+:root {
+  --arcade-red: #e52521;
+  --arcade-yellow: #fbd000;
+  --arcade-green: #43b047;
+  --arcade-blue: #5c94fc;
+  --arcade-brown: #3d2817;
+  --background: #5c94fc;
+  --foreground: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-bungee);
+  --font-display: var(--font-bungee);
+  --font-arcade: var(--font-press-start);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-press-start), monospace;
+}
+
+.game-viewport {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.font-display {
+  font-family: var(--font-bungee), Impact, sans-serif;
+}
+
+.font-arcade {
+  font-family: var(--font-press-start), monospace;
+}
+
+/* Hide scrollbars globally */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
