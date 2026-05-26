@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { pickKingdomRumor } from "@/data/kingdomRumors";
 import { getRunWorldTheme } from "@/data/runWorlds";
 import { getThemedWorld } from "@/lib/worldTheme";
@@ -10,8 +10,6 @@ import { cameraPan, smoothIn } from "@/lib/animations";
 import type { SecretRoute } from "@/lib/types";
 import type { GateSurpriseBundle } from "@/lib/surprise/types";
 import { MapNode } from "@/components/world-map/MapNode";
-import { InternetEventFlash } from "@/components/surprise/InternetEventFlash";
-
 interface WorldMapProps {
   currentWorld: number;
   mapTargetWorld: number;
@@ -46,13 +44,10 @@ export function WorldMap({
     mapBranch
   );
   const [rumor] = useState(() => pickKingdomRumor(view.worldId));
-  const [flashEvent, setFlashEvent] = useState(false);
   const theme = getThemedWorld(mapTargetWorld, route);
   const runTheme = getRunWorldTheme(view.worldId);
   const crowd = gateSurprises?.crowdEnergy;
-  const gateEvent = gateSurprises?.gateEvent;
   const micro = gateSurprises?.micro;
-  const flashMs = gateSurprises?.flashMs ?? 800;
   const enterLabel =
     micro?.id === "do-not-click" && micro.buttonLabel
       ? micro.buttonLabel
@@ -61,14 +56,6 @@ export function WorldMap({
   const handleEnter = () => {
     if (micro?.coinBonus && onMicroBonus) {
       onMicroBonus(micro.coinBonus);
-    }
-    if (gateEvent) {
-      setFlashEvent(true);
-      window.setTimeout(() => {
-        setFlashEvent(false);
-        onContinue();
-      }, flashMs);
-      return;
     }
     onContinue();
   };
@@ -205,7 +192,6 @@ export function WorldMap({
         <motion.button
           type="button"
           onClick={handleEnter}
-          disabled={flashEvent}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: [0, -4, 0] }}
           whileHover={{ y: -2, scale: 1.03 }}
@@ -231,11 +217,6 @@ export function WorldMap({
         {runTheme.decor}
       </span>
 
-      <AnimatePresence>
-        {flashEvent && gateEvent && (
-          <InternetEventFlash event={gateEvent} durationMs={flashMs} />
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }

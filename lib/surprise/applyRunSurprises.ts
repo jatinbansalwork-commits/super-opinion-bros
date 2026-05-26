@@ -1,6 +1,7 @@
 import type { CatalogQuestion } from "@/lib/questionCatalog/types";
 import type { Question } from "@/lib/types";
 import { getWorldTheme } from "@/data/worlds";
+import { displayQuestionTitle } from "@/lib/questionDisplay";
 import type { QuestionResult } from "@/lib/types";
 import type { QuestionMutationId, QuestionSurpriseMeta } from "./types";
 import { RARE_QUESTIONS } from "./rareQuestions";
@@ -30,7 +31,7 @@ function catalogToQuestion(
     percentB: cq.votes.percentB,
     totalVotes: cq.votes.total,
   };
-  let title = cq.question;
+  let title = displayQuestionTitle(cq.question);
   if (meta.mutation === "speedrun") {
     title = `Internet speedrun:\n${title.toUpperCase()}?!`;
   } else if (meta.mutation === "caps-lock") {

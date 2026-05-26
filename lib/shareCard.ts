@@ -44,10 +44,10 @@ export async function renderShareCardPng(
   ctx.fillRect(48, 320, W - 96, 200);
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "14px monospace";
-  ctx.fillText(`MATCH ${result.matchPercent}%`, W / 2, 360);
-  ctx.fillText(`CHAOS ${result.chaosScore}`, W / 2, 395);
-  ctx.fillText(`RANK: ${result.rank}`, W / 2, 430);
-  ctx.fillText(`${result.runCoins} COINS`, W / 2, 465);
+  ctx.fillText(`CROWD READ ${result.crowdReadPercent}%`, W / 2, 360);
+  ctx.fillText(`HOT TAKES ${result.hotTakes}`, W / 2, 385);
+  ctx.fillText(`SURPRISES ${result.surpriseTier}`, W / 2, 410);
+  ctx.fillText(`${result.runCoins} COINS`, W / 2, 445);
 
   ctx.fillStyle = "#FBD000";
   ctx.font = "12px monospace";

@@ -1,6 +1,6 @@
 /**
- * Generates data/questionCatalog.ts with exactly 300 questions.
- * Run: node scripts/generate-question-catalog.mjs
+ * Legacy generator — catalog is now procedural in data/questionCatalog.ts (10,000 Q).
+ * Run: node scripts/generate-question-catalog.mjs  (optional static export)
  */
 import { writeFileSync } from "fs";
 import { join, dirname } from "path";
@@ -191,13 +191,12 @@ function buildCategory(cat, startId) {
   for (let i = 0; i < 60; i++) {
     const t = rows[i % rows.length];
     const [question, emoji, a, b, pctA, pctB] = t;
-    const variant = i >= rows.length ? ` (${Math.floor(i / rows.length) + 1})` : "";
     const rarity = rarityForIndex(i);
     const winner = pctA >= pctB ? "A" : "B";
     const total = 3_000_000 + ((startId + i) * 137_891) % 15_000_000;
     out.push({
       id: `q${String(startId + i).padStart(4, "0")}`,
-      question: question + variant,
+      question,
       category: cat,
       rarity,
       weight: weightForRarity(rarity),

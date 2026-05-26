@@ -15,7 +15,8 @@ import { cameraPan, slideTransition } from "@/lib/animations";
 import { CAMERA_PAN_MS } from "@/lib/constants";
 import type { GamePhase } from "@/lib/types";
 
-const PAUSE_MS = 800;
+const PAUSE_MS_DEFAULT = 800;
+const PAUSE_MS_SPEED = 220;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,7 +36,8 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
     gateSurprises,
     mapFlicker,
     bossInternetNews,
-    activeGateEvent,
+    getActiveSurprise,
+    isSpeedRound,
     lastPrediction,
     bossCompleted,
     worldClearWorldId,
@@ -64,14 +66,14 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
   const handleContinue = useCallback(async () => {
     if (continuing || !question) return;
     setContinuing(true);
-    await delay(PAUSE_MS);
+    await delay(isSpeedRound() ? PAUSE_MS_SPEED : PAUSE_MS_DEFAULT);
     setCameraX("-14%");
     await delay(CAMERA_PAN_MS);
     setCameraX("0%");
     setEnterFromRight(true);
     advanceAfterResult();
     setContinuing(false);
-  }, [continuing, question, advanceAfterResult]);
+  }, [continuing, question, advanceAfterResult, isSpeedRound]);
 
   const showRound =
     (phase === "question" || phase === "result") && question;
@@ -174,7 +176,7 @@ export function GamePlayLayer({ phase }: GamePlayLayerProps) {
                   playerChoice={(pendingChoice ?? playerChoice)!}
                   modifiers={modifiers}
                   lastPrediction={lastPrediction}
-                  activeGateEvent={activeGateEvent}
+                  activeSurprise={getActiveSurprise()}
                   onAnswer={submitAnswer}
                   onContinue={handleContinue}
                   continuing={continuing}

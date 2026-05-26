@@ -15,6 +15,12 @@ export type GamePhase =
   | "checkpoint"
   | "final";
 
+export type NextRunModifier =
+  | "hot-takes"
+  | "chaos"
+  | "silent-majority"
+  | "random";
+
 export type CheckpointNext = "question" | "final" | "world-map";
 
 export type SecretRoute = "default" | "crowd" | "chaos" | "glitch";
@@ -105,14 +111,22 @@ export interface RunModifiers {
   timeTravelIndex?: number;
 }
 
+export type SurpriseTier = "LOW" | "MEDIUM" | "HIGH" | "MAXIMUM";
+
 export interface FinalResult {
+  /** Percent of questions where the player matched the majority. */
+  crowdReadPercent: number;
+  /** Times the player picked the minority side. */
+  hotTakes: number;
+  surpriseTier: SurpriseTier;
+  /** @deprecated Use crowdReadPercent — kept for rank math. */
   matchPercent: number;
-  rareChoices: number;
-  chaosScore: number;
+  summaryLine: string;
+  flavorLine: string;
+  bestTitle?: string | null;
   todayLabel: string;
   title: string;
   badge: string;
-  description: string;
   playstyle: string;
   alignment: string;
   variant: "hero" | "chaos" | "timeline" | "rebel" | "oracle" | "npc" | "king" | "algorithm" | "knight" | "goblin" | "prophet";

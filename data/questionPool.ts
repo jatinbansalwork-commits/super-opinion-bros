@@ -2,13 +2,14 @@ import {
   catalogToPoolShape,
   getAllCatalogQuestions,
   getCatalogQuestion,
-} from "@/lib/questionCatalog";
+} from "@/lib/questionCatalog/index";
 import {
   buildRunWithDirector,
   createRunSeed,
 } from "@/lib/questionDirector";
 import type { Question, QuestionResult } from "@/lib/types";
 import { getWorldTheme } from "@/data/worlds";
+import { displayQuestionTitle } from "@/lib/questionDisplay";
 
 export type PoolQuestion = ReturnType<typeof catalogToPoolShape>;
 
@@ -46,7 +47,7 @@ function poolToQuestion(pq: PoolQuestion, worldIndex: number): Question {
     world: worldIndex + 1,
     worldName: theme.name,
     kingdom: pq.special ? "WILD CARD" : theme.kingdom,
-    title: pq.text,
+    title: displayQuestionTitle(pq.text),
     emoji: pq.emoji,
     optionA: pq.options.a,
     optionB: pq.options.b,

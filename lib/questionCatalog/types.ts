@@ -3,11 +3,13 @@ import type { AnswerChoice } from "@/lib/types";
 export type QuestionCategory =
   | "food"
   | "internet"
+  | "pop-culture"
   | "culture"
   | "tech"
-  | "chaos";
+  | "chaos"
+  | "random";
 
-export type QuestionRarity = "common" | "uncommon" | "rare";
+export type QuestionRarity = "common" | "uncommon" | "rare" | "cursed";
 
 export interface CatalogQuestion {
   id: string;
@@ -35,7 +37,9 @@ export interface CatalogQuestionStats {
 export interface DirectorHistory {
   version: number;
   runCounter: number;
-  /** Last 3 runs of question ids (newest first). */
+  /** Last 10 runs of question ids (newest first). */
   recentRuns: string[][];
+  /** Last 50 questions seen this browser session. */
+  sessionRecent: string[];
   questions: Record<string, CatalogQuestionStats>;
 }

@@ -1,23 +1,31 @@
-import { QUESTION_CATALOG, CATALOG_SIZE } from "@/data/questionCatalog";
+import {
+  QUESTION_CATALOG,
+  CATALOG_SIZE,
+  getCatalogByCategory,
+  getCatalogQuestion,
+  getAllCatalogQuestions,
+} from "@/data/questionCatalog";
 import type { CatalogQuestion, QuestionCategory } from "./types";
 
 export type { CatalogQuestion, QuestionCategory, QuestionRarity } from "./types";
-export { CATALOG_SIZE };
+export { CATALOG_SIZE, getAllCatalogQuestions, getCatalogQuestion };
 
-const BY_ID = new Map(QUESTION_CATALOG.map((q) => [q.id, q]));
+const BY_ID = new Map<string, CatalogQuestion>();
 
-export function getCatalogQuestion(id: string): CatalogQuestion | undefined {
-  return BY_ID.get(id);
-}
-
-export function getAllCatalogQuestions(): CatalogQuestion[] {
-  return QUESTION_CATALOG;
+export function getCatalogQuestionCached(id: string): CatalogQuestion | undefined {
+  if (!BY_ID.size) {
+    for (const q of getAllCatalogQuestions()) {
+      BY_ID.set(q.id, q);
+    }
+  }
+  return BY_ID.get(id) ?? getCatalogQuestion(id);
 }
 
 export function filterCatalogByCategory(
   category: QuestionCategory
 ): CatalogQuestion[] {
-  return QUESTION_CATALOG.filter((q) => q.category === category);
+  const cat = category === "culture" ? "pop-culture" : category;
+  return getCatalogByCategory(cat);
 }
 
 export function catalogToPoolShape(q: CatalogQuestion) {
@@ -36,3 +44,5 @@ export function catalogToPoolShape(q: CatalogQuestion) {
     special: q.special,
   };
 }
+
+export { QUESTION_CATALOG };

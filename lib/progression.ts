@@ -28,8 +28,8 @@ export const MATCH_RANKS: {
     rank: "lurker",
     minMatch: 26,
     emoji: "👀",
-    label: "Lurker",
-    tagline: "Reads comments. Rarely posts.",
+    label: "Quiet Voter",
+    tagline: "Reads the room. Rarely posts.",
   },
   {
     rank: "main-character",

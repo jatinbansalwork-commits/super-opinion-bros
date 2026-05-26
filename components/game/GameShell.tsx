@@ -32,9 +32,9 @@ export function GameShell() {
     hydrate,
     goToModeSelect,
     startNewGame,
+    startNextRun,
     quitToTitle,
     restartRun,
-    resetGame,
   } = useGameStore();
 
   const [pipeActive, setPipeActive] = useState(false);
@@ -173,9 +173,9 @@ export function GameShell() {
             >
               <FinalCastle
                 result={finalResult}
-                onPlayAgain={() => {
-                  audio.stop();
-                  resetGame();
+                onStartNextRun={(mod) => {
+                  audio.playSfx("start");
+                  startNextRun(mod);
                 }}
               />
             </motion.div>

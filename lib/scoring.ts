@@ -1,7 +1,12 @@
-import { getPoolQuestion } from "@/data/questionPool";
 import { ROUTE_DISPLAY_NAMES, ROUTE_LABELS } from "@/data/routes";
 import { predictionMatched } from "@/lib/rewards";
-import { endRankReward, rankDisplayLabel } from "@/lib/progression";
+import { rankDisplayLabel, endRankReward } from "@/lib/progression";
+import {
+  generateRunSummary,
+  surpriseTierFromCount,
+} from "@/lib/resultStats";
+import { buildResultIdentity } from "@/lib/resultIdentity";
+import { loadBestTitle } from "@/lib/playerRetention";
 import { computeRouteScores, resolveSecretRoute } from "@/lib/routes";
 import type {
   AnswerChoice,
@@ -45,128 +50,73 @@ export interface FinalCalcInput {
   runCoins: number;
   level: number;
   route?: SecretRoute;
+  surpriseCount?: number;
+  bossWins?: number;
+  bossAttempts?: number;
 }
 
 export function calculateFinalResult(input: FinalCalcInput): FinalResult {
   const {
     playerAnswers,
-    runQuestions,
     runCoins,
     level,
     route: routeOverride,
+    surpriseCount: trackedSurprises = 0,
+    bossWins = 0,
+    bossAttempts = 0,
   } = input;
 
   const total = playerAnswers.length || 1;
   const matches = playerAnswers.filter((a) => a.matchedMajority).length;
-  const matchPercent = Math.round((matches / total) * 100);
+  const crowdReadPercent = Math.round((matches / total) * 100);
+  const matchPercent = crowdReadPercent;
+  const hotTakes = playerAnswers.filter((a) => !a.matchedMajority).length;
   const rank = rankDisplayLabel(matchPercent, playerAnswers.length);
   const rankReward = endRankReward(matchPercent);
 
-  let rareChoices = 0;
-  let chaosAccumulator = 0;
-  let specialAnswered = 0;
+  const surpriseCount = Math.max(trackedSurprises, 1);
+  const surpriseTier = surpriseTierFromCount(surpriseCount);
+  const summaryLine = generateRunSummary({
+    crowdReadPercent,
+    hotTakes,
+    surpriseTier,
+    totalQuestions: total,
+  });
 
-  for (const answer of playerAnswers) {
-    const question =
-      runQuestions.find((q) => q.id === answer.questionId) ??
-      (() => {
-        const pq = getPoolQuestion(answer.questionId);
-        if (!pq) return null;
-        return {
-          result: {
-            percentA: pq.votes.percentA,
-            percentB: pq.votes.percentB,
-          },
-        };
-      })();
+  const identity = buildResultIdentity({
+    crowdReadPercent,
+    hotTakes,
+    surpriseTier,
+    totalQuestions: total,
+    bossWins,
+    bossAttempts,
+  });
 
-    if (!question) continue;
-
-    const playerPercent =
-      answer.choice === "A"
-        ? question.result.percentA
-        : question.result.percentB;
-
-    if (playerPercent < 40) rareChoices += 1;
-    chaosAccumulator += Math.abs(50 - playerPercent);
-
-    const pq = getPoolQuestion(answer.questionId);
-    if (pq?.special) specialAnswered += 1;
-  }
-
-  const chaosScore = Math.round(chaosAccumulator / total);
   const routeScores = computeRouteScores(playerAnswers);
   const route = routeOverride ?? resolveSecretRoute(routeScores);
   const todayLabel = "TODAY YOU WERE…";
-
-  let title = "THE INTERNET NPC";
-  let badge = "🙂 AVERAGE LEGEND";
-  let description = "You lurk. You vote. You vanish.";
-  let playstyle = "Balanced predictor";
   const alignment =
     route === "default"
       ? "Neutral alignment"
       : ROUTE_DISPLAY_NAMES[route as keyof typeof ROUTE_DISPLAY_NAMES] ??
         ROUTE_LABELS[route];
-  let variant: FinalResult["variant"] = "npc";
 
-  if (matchPercent >= 82) {
-    title = "THE INTERNET KING";
-    badge = "👑 CROWN VERIFIED";
-    description = "The timeline bends to your polls.";
-    playstyle = "Crowd oracle";
-    variant = "king";
-  } else if (matchPercent >= 65 && matchPercent < 82) {
-    title = "OPINION KNIGHT";
-    badge = "⚔️ HONORABLE VOTER";
-    description = "You defend the majority with honor.";
-    playstyle = "Knight of consensus";
-    variant = "knight";
-  } else if (matchPercent <= 25) {
-    title = "CHAOS GREMLIN";
-    badge = "🔥 AGENT OF CHAOS";
-    description = "You feed on ratio energy.";
-    playstyle = "Chaos agent";
-    variant = "goblin";
-  } else if (rareChoices >= 6 || specialAnswered >= 2) {
-    title = "THE HOT TAKE MACHINE";
-    badge = "🗡️ SPICY VOTER";
-    description = "Comments fear your notifications.";
-    playstyle = "Contrarian engine";
-    variant = "rebel";
-  } else if (route === "glitch") {
-    title = "THE TIMELINE BREAKER";
-    badge = "⭐ GLITCH ENDING";
-    description = "You exist between timelines.";
-    playstyle = "Glitch walker";
-    variant = "timeline";
-  } else if (matchPercent >= 70 && route === "crowd") {
-    title = "ALGORITHM PROPHET";
-    badge = "🤖 FEED FRIEND";
-    description = "The algorithm whispers: 'more of this.'";
-    playstyle = "Feed friendly";
-    variant = "prophet";
-  } else if (route === "chaos") {
-    title = "CHAOS GREMLIN";
-    badge = "👹 CHAOS ROAD";
-    description = "You took the spicy path on purpose.";
-    playstyle = "Chaos pilgrim";
-    variant = "chaos";
-  }
-
-  const shareLine = `SUPER OPINION BROS — ${title} | ${matchPercent}% | ${rank} | ${runCoins} coins`;
+  const shareLine = `SUPER OPINION BROS — ${identity.title} | Crowd ${crowdReadPercent}% | ${surpriseTier} surprises | ${runCoins} coins`;
 
   return {
+    crowdReadPercent,
+    hotTakes,
+    surpriseTier,
     matchPercent,
-    rareChoices,
-    chaosScore,
+    summaryLine,
+    flavorLine: identity.flavorLine,
+    bestTitle: loadBestTitle(),
     todayLabel,
-    title,
-    badge,
-    description,
-    playstyle,
+    title: identity.title,
+    badge: identity.badge,
+    playstyle: identity.playstyle,
     alignment,
-    variant,
+    variant: identity.variant,
     rank,
     rankFlavor: rankReward.flavor,
     level,

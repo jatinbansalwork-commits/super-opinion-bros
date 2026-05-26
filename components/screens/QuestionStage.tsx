@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Question, AnswerChoice, RunModifiers } from "@/lib/types";
-import type { InternetGateEvent } from "@/lib/surprise/types";
+import type { RunSurprise } from "@/lib/surpriseEngine";
+import { SurpriseBanner } from "@/components/surprise/SurpriseBanner";
 import { modifierLabel } from "@/lib/questionModifiers";
+import { displayQuestionTitle } from "@/lib/questionDisplay";
 import { ArcadeButton } from "@/components/ui/ArcadeButton";
 import { springFast, smoothLoop } from "@/lib/animations";
 
@@ -14,7 +16,7 @@ interface QuestionStageProps {
   locked: boolean;
   dimmed?: boolean;
   modifiers?: RunModifiers;
-  activeGateEvent?: InternetGateEvent | null;
+  activeSurprise?: RunSurprise | null;
 }
 
 const dimAnimate = {
@@ -35,7 +37,7 @@ export function QuestionStage({
   locked,
   dimmed = false,
   modifiers = {},
-  activeGateEvent = null,
+  activeSurprise = null,
 }: QuestionStageProps) {
   const [jumping, setJumping] = useState<AnswerChoice | null>(null);
   const removed = modifiers.fiftyFiftyRemoved;
@@ -65,10 +67,8 @@ export function QuestionStage({
       <p className="font-arcade text-xs sm:text-sm text-[#FBD000] text-center drop-shadow-[2px_2px_0_#3D2817]">
         WHAT WILL THE INTERNET CHOOSE?
       </p>
-      {activeGateEvent && (
-        <p className="font-arcade text-[10px] text-white border-2 border-[#FBD000] bg-black/40 px-2 py-0.5 rounded">
-          {activeGateEvent.emoji} {activeGateEvent.title}
-        </p>
+      {activeSurprise && (
+        <SurpriseBanner type={activeSurprise.type} />
       )}
       {question.mutation && !qMod && (
         <p className="font-arcade text-[10px] text-[#FBD000]/90">
@@ -104,7 +104,7 @@ export function QuestionStage({
           </p>
         )}
         <p className="font-display text-xl sm:text-3xl text-[#3D2817] leading-tight text-center whitespace-pre-line">
-          {question.title}
+          {displayQuestionTitle(question.title)}
         </p>
         <motion.span
           className="block text-6xl sm:text-8xl mt-4 text-center"
